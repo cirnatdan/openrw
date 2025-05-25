@@ -126,7 +126,7 @@ RWGame::RWGame(Logger& log, const std::optional<RWArgConfigLayer> &args)
 
     loadGameData();
 
-    stateManager.enter<LoadingState>(this, [&]() {
+    stateManager.enter<LoadingState>(this, [benchFile, test, newgame, startSave, this]() {
         if (benchFile.has_value()) {
             stateManager.enter<BenchmarkState>(this, *benchFile);
         } else if (test) {
