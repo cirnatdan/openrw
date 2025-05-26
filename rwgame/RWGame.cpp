@@ -441,7 +441,7 @@ int RWGame::run() {
             chrono::duration<float>(currentFrame - lastFrame).count();
         lastFrame = currentFrame;
 
-        if (!world->isPaused()) {
+        if (world && !world->isPaused()) {
             accumulatedTime += frameTime;
 
             // Clamp frameTime, so we won't freeze completely
@@ -678,13 +678,15 @@ void RWGame::render(float alpha, float time) {
 
     renderer.getRenderer().pushDebugGroup("World");
 
-    renderer.renderWorld(world.get(), viewCam, alpha);
+    if (world) {
+        renderer.renderWorld(world.get(), viewCam, alpha);
+    }
 
     renderer.getRenderer().popDebugGroup();
 
     renderDebugView();
 
-    if (!world->isPaused()) hudDrawer.drawOnScreenText(world.get(), renderer);
+    if (world && !world->isPaused()) hudDrawer.drawOnScreenText(world.get(), renderer);
 
     if (stateManager.currentState()) {
         RW_PROFILE_SCOPE("state");

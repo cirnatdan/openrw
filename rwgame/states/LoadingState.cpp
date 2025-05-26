@@ -15,8 +15,11 @@ void LoadingState::exit() {
 void LoadingState::tick(float dt) {
     RW_UNUSED(dt);
 
-    done();
-    complete();
+    if (game->isGameDataLoaded()) {
+        game->getWorld()->sound.initialize();
+        done();
+        complete();
+    }
 }
 
 bool LoadingState::shouldWorldUpdate() {
