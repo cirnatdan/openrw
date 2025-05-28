@@ -13,7 +13,7 @@ BOOST_AUTO_TEST_CASE(test_matrix) {
 
         /** Models are currently needed to relate animation bones <=> model
          * frame #s. */
-        auto test_model = Global::get().d->loadClump("player.dff");
+        auto test_model = Global::get().d->loadClump("player.dff", "generic");
 
         Animator animator(test_model);
 

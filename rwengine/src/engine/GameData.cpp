@@ -35,10 +35,35 @@
 
 GameData::GameData(Logger* log, const std::filesystem::path& path)
     : datpath(path), logger(log) {
-    dffLoader.setTextureLookupCallback(
-        [&](const std::string& texture, const std::string&) {
-            return findSlotTexture(currenttextureslot, texture);
-        });
+}
+
+LoaderDFF& GameData::getDFFLoader(const std::string& textureSlot) {
+    // Check if we already have a loader for this texture slot
+    auto it = dffLoaderCache.find(textureSlot);
+    if (it == dffLoaderCache.end()) {
+        // Create a new loader for this texture slot
+        auto loader = std::make_unique<LoaderDFF>();
+        auto slotIt = textureSlots.find(textureSlot);
+
+        if (slotIt != textureSlots.end()) {
+            // Set up the texture lookup callback for this loader
+            loader->setTextureLookupCallback(
+                [slotIt](const std::string& texture, const std::string&) -> TextureData* {
+                    auto textureIt = slotIt->second.find(texture);
+                    if (textureIt == slotIt->second.end()) {
+                        return nullptr;
+                    }
+                    return textureIt->second.get();
+                });
+        } else {
+            logger->warning("Data", "Texture slot not found: " + textureSlot);
+        }
+
+        // Insert the new loader into the cache and get an iterator to it
+        it = dffLoaderCache.emplace(textureSlot, std::move(loader)).first;
+    }
+
+    return *it->second;
 }
 
 bool GameData::load() {
@@ -95,9 +120,6 @@ void GameData::loadLevelFile(const std::string& path) {
         return;
     }
 
-    // Reset texture slot
-    currenttextureslot = "generic";
-
     for (std::string line, cmd; std::getline(datfile, line);) {
         if (line.empty() || line[0] == '#') continue;
 #ifndef RW_WINDOWS
@@ -128,7 +150,7 @@ void GameData::loadLevelFile(const std::string& path) {
                 loadTXD(name);
             } else if (cmd == "MODELFILE") {
                 auto path = line.substr(space + 1);
-                loadModelFile(path);
+                loadModelFile(path, "generic");
             }
         }
     }
@@ -363,9 +385,6 @@ void GameData::loadTXD(const std::string& name) {
         slot = name.substr(0, ext);
     }
 
-    // Set the current texture slot
-    currenttextureslot = slot;
-
     // Check if this texture slot is loaded already
     auto slotit = textureSlots.find(slot);
     if (slotit != textureSlots.end()) {
@@ -418,36 +437,29 @@ void GameData::getNameAndLod(std::string& name, int& lod) {
     }
 }
 
-ClumpPtr GameData::loadClump(const std::string& name) {
+ClumpPtr GameData::loadClump(const std::string& name, const std::string& textureSlot) {
     auto file = index.openFile(name);
     if (!file.data) {
         logger->error("Data", "Failed to load model " + name);
         return nullptr;
     }
-    auto m = dffLoader.loadFromMemory(file);
-    if (!m) {
+
+    ClumpPtr result = getDFFLoader(textureSlot).loadFromMemory(file);
+    if (!result) {
         logger->error("Data", "Error loading model file " + name);
         return nullptr;
     }
-    return m;
-}
-
-ClumpPtr GameData::loadClump(const std::string& name, const std::string& textureSlot) {
-    std::string currentSlot = currenttextureslot;
-    if (!textureSlot.empty())
-        currenttextureslot = textureSlot;
-    ClumpPtr result = loadClump(name);
-    currenttextureslot = currentSlot;
     return result;
 }
 
-void GameData::loadModelFile(const std::string& name) {
+void GameData::loadModelFile(const std::string& name, const std::string& textureSlot) {
     auto file = index.openFileRaw(name);
     if (!file.data) {
         logger->log("Data", Logger::Error, "Failed to load model file " + name);
         return;
     }
-    auto m = dffLoader.loadFromMemory(file);
+
+    auto m = getDFFLoader(textureSlot).loadFromMemory(file);
     if (!m) {
         logger->log("Data", Logger::Error, "Error loading model file " + name);
         return;
@@ -514,7 +526,8 @@ bool GameData::loadModel(ModelID model) {
                                   std::to_string(model) + " [" + name + "]");
         return false;
     }
-    auto m = dffLoader.loadFromMemory(file);
+
+    auto m = getDFFLoader(slotname).loadFromMemory(file);
     if (!m) {
         logger->error("Data",
                       "Error loading model file for " + std::to_string(model));
