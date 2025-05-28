@@ -362,7 +362,7 @@ CharacterObject* GameWorld::createPlayer(const glm::vec3& pos,
 
     data->loadTXD(texturename + ".txd");
     if (!pt->isLoaded()) {
-        auto model = data->loadClump(modelname + ".dff");
+        auto model = data->loadClump(modelname + ".dff", texturename);
         pt->setModel(model);
     }
 

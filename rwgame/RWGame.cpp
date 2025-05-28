@@ -45,7 +45,7 @@ static constexpr std::array<
     std::tuple<GameRenderer::SpecialModel, char const*, char const*>, 3>
     kSpecialModels{{{GameRenderer::ZoneCylinderA, "zonecyla.dff", "particle"},
                     {GameRenderer::ZoneCylinderB, "zonecylb.dff", "particle"},
-                    {GameRenderer::Arrow, "arrow.dff", ""}}};
+                    {GameRenderer::Arrow, "arrow.dff", "particle"}}};
 
 constexpr float kMaxPhysicsSubSteps = 2;
 }  // namespace

@@ -5,7 +5,6 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
-#include <cstdint>
 #include <data/AnimGroup.hpp>
 #include <data/ModelData.hpp>
 #include <data/PedData.hpp>
@@ -21,7 +20,6 @@
 #include <mutex>
 #include <objects/VehicleInfo.hpp>
 #include <platform/FileIndex.hpp>
-#include <rw/debug.hpp>
 #include <rw/forward.hpp>
 #include <string>
 #include <unordered_map>
@@ -47,10 +45,16 @@ class GameData {
 private:
     std::filesystem::path datpath;
     std::string splash;
-    std::string currenttextureslot;
 
     Logger* logger;
-    LoaderDFF dffLoader;
+    std::unordered_map<std::string, std::unique_ptr<LoaderDFF>> dffLoaderCache;
+
+    /**
+     * @brief Gets a DFF loader for the specified texture slot
+     * @param textureSlot The texture slot to use for texture lookup
+     * @return A reference to a LoaderDFF instance configured for the texture slot
+     */
+    LoaderDFF& getDFFLoader(const std::string& textureSlot);
 
 public:
     /**
@@ -145,17 +149,12 @@ public:
     /**
      * Loads an archived model and returns it directly
      */
-    ClumpPtr loadClump(const std::string& name);
-
-    /**
-     * Loads an archived model and returns it directly
-     */
     ClumpPtr loadClump(const std::string& name, const std::string& textureSlot);
 
     /**
      * Loads a DFF and associates its atomics with models.
      */
-    void loadModelFile(const std::string& name);
+    void loadModelFile(const std::string& name, const std::string& textureSlot);
 
     /**
      * Loads and associates a model's data

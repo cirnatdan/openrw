@@ -324,7 +324,7 @@ void CharacterObject::changeCharacterModel(const std::string& name) {
     /// @todo don't model leak here
 
     engine->data->loadTXD(modelName + ".txd");
-    auto newmodel = engine->data->loadClump(modelName + ".dff");
+    auto newmodel = engine->data->loadClump(modelName + ".dff", modelName);
 
     setModel(newmodel);
 
