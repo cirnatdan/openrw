@@ -59,6 +59,7 @@ void RWGame::loadGameData() {
         throw std::runtime_error("Invalid game directory path: " +
                                  config.gamedataPath());
     }
+    data.processTextureLoadQueue();
 
     for (const auto& [specialModel, fileName, name] : kSpecialModels) {
         auto model = data.loadClump(fileName, name);

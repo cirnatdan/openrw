@@ -52,12 +52,19 @@ bool GameData::load() {
     /// @todo cuts.img files should be loaded differently to gta3.img
     loadIMG("anim/cuts.img");
 
-    textureSlots["particle"] = loadTextureArchive("particle.txd");
-    textureSlots["icons"] = loadTextureArchive("icons.txd");
-    textureSlots["hud"] = loadTextureArchive("hud.txd");
-    textureSlots["fonts"] = loadTextureArchive("fonts.txd");
-    textureSlots["generic"] = loadTextureArchive("generic.txd");
-    loadToTextureArchive("misc.txd", textureSlots["generic"]);
+    queueTextureLoad("particle.txd", "particle");
+    queueTextureLoad("icons.txd", "icons");
+    queueTextureLoad("hud.txd", "hud");
+    queueTextureLoad("fonts.txd", "fonts");
+    queueTextureLoad("generic.txd", "generic");
+    queueTextureLoad("misc.txd", "misc");
+
+    // textureSlots["particle"] = loadTextureArchive("particle.txd");
+    // textureSlots["icons"] = loadTextureArchive("icons.txd");
+    // textureSlots["hud"] = loadTextureArchive("hud.txd");
+    // textureSlots["fonts"] = loadTextureArchive("fonts.txd");
+    // textureSlots["generic"] = loadTextureArchive("generic.txd");
+    // loadToTextureArchive("misc.txd", textureSlots["generic"]);
 
     loadCarcols("data/carcols.dat");
     loadWeather("data/timecyc.dat");
@@ -773,3 +780,54 @@ bool GameData::isValidGameDirectory() const {
 
     return !ec;
 }
+
+void GameData::queueTextureLoad(const std::string& name, const std::string& archiveName) {
+    auto file = loadTextureFile(name);
+    if (!file.data) {
+        logger->error("Data", "Failed to open txd: " + name);
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_textureQueueMutex);
+    m_pendingTextureLoads.push_back({name, std::move(file), archiveName});
+}
+
+FileContentsInfo GameData::loadTextureFile(const std::string& name) {
+    // This can be called from any thread
+    return index.openFile(name);
+}
+
+size_t GameData::processTextureLoadQueue() {
+    // This must be called from the main thread
+    if (m_processingTextures.exchange(true)) {
+        return 0; // Already processing
+    }
+
+    std::vector<PendingTextureLoad> localQueue;
+    {
+        std::lock_guard<std::mutex> lock(m_textureQueueMutex);
+        localQueue = std::move(m_pendingTextureLoads);
+        m_pendingTextureLoads.clear();
+    }
+
+    if (localQueue.empty()) {
+        m_processingTextures = false;
+        return 0;
+    }
+
+    logger->info("Data", "Processing " + std::to_string(localQueue.size()) + " queued texture loads");
+
+    size_t processed = 0;
+    for (const auto& load : localQueue) {
+        if (textureSlots.find(load.archiveName) == textureSlots.end()) {
+            textureSlots[load.archiveName] = loadTextureArchive(load.name);
+        } else {
+            loadToTextureArchive(load.name, textureSlots[load.archiveName]);
+        }
+        processed++;
+    }
+
+    m_processingTextures = false;
+    return processed;
+}
+
