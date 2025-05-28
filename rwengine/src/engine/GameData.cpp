@@ -82,7 +82,7 @@ bool GameData::load() {
     queueTextureLoad("hud.txd", "hud");
     queueTextureLoad("fonts.txd", "fonts");
     queueTextureLoad("generic.txd", "generic");
-    queueTextureLoad("misc.txd", "misc");
+    queueTextureLoad("misc.txd", "generic");
 
     // textureSlots["particle"] = loadTextureArchive("particle.txd");
     // textureSlots["icons"] = loadTextureArchive("icons.txd");
