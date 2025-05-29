@@ -48,9 +48,11 @@ LoaderDFF& GameData::getDFFLoader(const std::string& textureSlot) {
         if (slotIt != textureSlots.end()) {
             // Set up the texture lookup callback for this loader
             loader->setTextureLookupCallback(
-                [slotIt](const std::string& texture, const std::string&) -> TextureData* {
+                [slotIt, this, &textureSlot](const std::string& texture, const std::string&) -> TextureData* {
+                    logger->verbose("Data", "Performing texture lookup in slot: " + textureSlot);
                     auto textureIt = slotIt->second.find(texture);
                     if (textureIt == slotIt->second.end()) {
+                        logger->warning("Data", "Texture not found: " + texture);
                         return nullptr;
                     }
                     return textureIt->second.get();
