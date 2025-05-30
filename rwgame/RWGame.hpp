@@ -118,6 +118,7 @@ public:
 
     bool isGameDataLoaded() const;
     void loadGameData();
+    void finishLoadingGameData();
 
 private:
     void tick(float dt);

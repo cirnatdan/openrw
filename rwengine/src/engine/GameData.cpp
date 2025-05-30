@@ -48,7 +48,7 @@ LoaderDFF& GameData::getDFFLoader(const std::string& textureSlot) {
         if (slotIt != textureSlots.end()) {
             // Set up the texture lookup callback for this loader
             loader->setTextureLookupCallback(
-                [slotIt, this, &textureSlot](const std::string& texture, const std::string&) -> TextureData* {
+                [slotIt, this, textureSlot](const std::string& texture, const std::string&) -> TextureData* {
                     logger->verbose("Data", "Performing texture lookup in slot: " + textureSlot);
                     auto textureIt = slotIt->second.find(texture);
                     if (textureIt == slotIt->second.end()) {
@@ -111,13 +111,18 @@ bool GameData::load() {
     gamezones = ZoneDataList{
         {"CITYZON", 0, {-4000.f, -4000.f, -500.f}, {4000.f, 4000.f, 500.f}, 0, 0, 0}};
 
+    return true;
+}
+
+/**
+ * Load levels and other stuff
+ */
+void GameData::load2() {
     loadLevelFile("data/default.dat");
     loadLevelFile("data/gta3.dat");
 
     // Load ped groups after IDEs so they can resolve
     loadPedGroups("data/pedgrp.dat");
-
-    return true;
 }
 
 void GameData::loadLevelFile(const std::string& path) {

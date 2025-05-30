@@ -59,40 +59,55 @@ void RWGame::loadGameData() {
         throw std::runtime_error("Invalid game directory path: " +
                                  config.gamedataPath());
     }
+    auto initialLoadTimeEnd = std::chrono::steady_clock::now();
+    log.info("Game", "Initial load took " +
+             std::to_string(
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                     initialLoadTimeEnd - loadTimeStart)
+                     .count()) +
+             "ms");
     data.processTextureLoadQueue();
 
-    for (const auto& [specialModel, fileName, name] : kSpecialModels) {
-        auto model = data.loadClump(fileName, name);
-        renderer.setSpecialModel(specialModel, model);
-    }
+    data.load2();
+    data.processTextureLoadQueue();
 
-    // Set up text renderer
-    renderer.text.setFontTexture(FONT_PAGER, "pager");
-    renderer.text.setFontTexture(FONT_PRICEDOWN, "font1");
-    renderer.text.setFontTexture(FONT_ARIAL, "font2");
-
-    hudDrawer.applyHUDScale(config.hudScale());
-    renderer.map.scaleHUD(config.hudScale());
-
-    data.loadDynamicObjects((std::filesystem::path{config.gamedataPath()} / "data/object.dat")
-                                .string());  // FIXME: use path
-
-    data.loadGXT("text/" + config.gameLanguage() + ".gxt");
-
-    getRenderer().water.setWaterTable(data.waterHeights, 48, data.realWater,
-                                      128 * 128);
-
-    for (int m = 0; m < MAP_BLOCK_SIZE; ++m) {
-        std::ostringstream oss;
-        oss << "radar" << std::setw(2) << std::setfill('0') << m << ".txd";
-        data.loadTXD(oss.str());
-    }
-
-    dataLoaded = true;
     auto loadTimeEnd = std::chrono::steady_clock::now();
     auto loadTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(loadTimeEnd - loadTimeStart);
     log.info("Game", "Loading took " + std::to_string(loadTime.count()) + " ms");
+}
+
+void RWGame::finishLoadingGameData() {
+    if (!dataLoaded) {
+        for (const auto& [specialModel, fileName, name] : kSpecialModels) {
+            auto model = data.loadClump(fileName, name);
+            renderer.setSpecialModel(specialModel, model);
+        }
+
+        // Set up text renderer
+        renderer.text.setFontTexture(FONT_PAGER, "pager");
+        renderer.text.setFontTexture(FONT_PRICEDOWN, "font1");
+        renderer.text.setFontTexture(FONT_ARIAL, "font2");
+
+        hudDrawer.applyHUDScale(config.hudScale());
+        renderer.map.scaleHUD(config.hudScale());
+
+        data.loadDynamicObjects((std::filesystem::path{config.gamedataPath()} / "data/object.dat")
+                                    .string());  // FIXME: use path
+
+        data.loadGXT("text/" + config.gameLanguage() + ".gxt");
+
+        getRenderer().water.setWaterTable(data.waterHeights, 48, data.realWater,
+                                          128 * 128);
+
+        for (int m = 0; m < MAP_BLOCK_SIZE; ++m) {
+            std::ostringstream oss;
+            oss << "radar" << std::setw(2) << std::setfill('0') << m << ".txd";
+            data.loadTXD(oss.str());
+        }
+
+        dataLoaded = true;
+    }
 }
 
 bool RWGame::isGameDataLoaded() const {
@@ -126,6 +141,9 @@ RWGame::RWGame(Logger& log, const std::optional<RWArgConfigLayer> &args)
     debug.setShaderProgram(renderer.worldProg.get());
 
     loadGameData();
+    // data.processTextureLoadQueue();
+    finishLoadingGameData();
+    // data.processTextureLoadQueue();
 
     stateManager.enter<LoadingState>(this, [benchFile, test, newgame, startSave, this]() {
         if (benchFile.has_value()) {
@@ -689,7 +707,7 @@ void RWGame::render(float alpha, float time) {
 
     if (world && !world->isPaused()) hudDrawer.drawOnScreenText(world.get(), renderer);
 
-    if (stateManager.currentState()) {
+    if (stateManager.currentState() && isGameDataLoaded()) {
         RW_PROFILE_SCOPE("state");
         stateManager.draw(renderer);
     }

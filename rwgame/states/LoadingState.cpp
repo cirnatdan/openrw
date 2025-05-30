@@ -31,6 +31,9 @@ void LoadingState::handleEvent(const SDL_Event& e) {
 }
 
 void LoadingState::draw(GameRenderer& r) {
+    if (!game->isGameDataLoaded()) {
+        return;
+    }
     // Display some manner of loading screen.
     TextRenderer::TextInfo ti;
     ti.text = GameStringUtil::fromString("Loading...", FONT_ARIAL);

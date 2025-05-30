@@ -119,6 +119,7 @@ public:
     void loadWater(const std::string& path);
 
     bool load();
+    void load2();
 
     /**
      * Loads model, placement, models and textures from a level file
