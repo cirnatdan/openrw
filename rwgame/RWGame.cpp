@@ -52,6 +52,68 @@ constexpr float kMaxPhysicsSubSteps = 2;
 
 #define MOUSE_SENSITIVITY_SCALE 2.5f
 
+void RWGame::loadGameData() {
+    auto loadTimeStart = std::chrono::steady_clock::now();
+    log.info("Game", "Game directory: " + config.gamedataPath());
+    if (!data.load()) {
+        throw std::runtime_error("Invalid game directory path: " +
+                                 config.gamedataPath());
+    }
+    auto initialLoadTimeEnd = std::chrono::steady_clock::now();
+    log.info("Game", "Initial load took " +
+             std::to_string(
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                     initialLoadTimeEnd - loadTimeStart)
+                     .count()) +
+             "ms");
+    data.processTextureLoadQueue();
+
+    data.load2();
+    data.processTextureLoadQueue();
+
+    auto loadTimeEnd = std::chrono::steady_clock::now();
+    auto loadTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(loadTimeEnd - loadTimeStart);
+    log.info("Game", "Loading took " + std::to_string(loadTime.count()) + " ms");
+}
+
+void RWGame::finishLoadingGameData() {
+    if (!dataLoaded) {
+        for (const auto& [specialModel, fileName, name] : kSpecialModels) {
+            auto model = data.loadClump(fileName, name);
+            renderer.setSpecialModel(specialModel, model);
+        }
+
+        // Set up text renderer
+        renderer.text.setFontTexture(FONT_PAGER, "pager");
+        renderer.text.setFontTexture(FONT_PRICEDOWN, "font1");
+        renderer.text.setFontTexture(FONT_ARIAL, "font2");
+
+        hudDrawer.applyHUDScale(config.hudScale());
+        renderer.map.scaleHUD(config.hudScale());
+
+        data.loadDynamicObjects((std::filesystem::path{config.gamedataPath()} / "data/object.dat")
+                                    .string());  // FIXME: use path
+
+        data.loadGXT("text/" + config.gameLanguage() + ".gxt");
+
+        getRenderer().water.setWaterTable(data.waterHeights, 48, data.realWater,
+                                          128 * 128);
+
+        for (int m = 0; m < MAP_BLOCK_SIZE; ++m) {
+            std::ostringstream oss;
+            oss << "radar" << std::setw(2) << std::setfill('0') << m << ".txd";
+            data.loadTXD(oss.str());
+        }
+
+        dataLoaded = true;
+    }
+}
+
+bool RWGame::isGameDataLoaded() const {
+    return dataLoaded;
+}
+
 RWGame::RWGame(Logger& log, const std::optional<RWArgConfigLayer> &args)
     : GameBase(log, args)
     , data(&log, config.gamedataPath())
@@ -60,7 +122,6 @@ RWGame::RWGame(Logger& log, const std::optional<RWArgConfigLayer> &args)
     RW_PROFILE_THREAD("Main");
     RW_TIMELINE_ENTER("Startup", MP_YELLOW);
 
-    auto loadTimeStart = std::chrono::steady_clock::now();
     bool newgame = false;
     bool test = false;
     std::optional<std::string> startSave;
@@ -79,40 +140,12 @@ RWGame::RWGame(Logger& log, const std::optional<RWArgConfigLayer> &args)
                        btIDebugDraw::DBG_DrawConstraintLimits);
     debug.setShaderProgram(renderer.worldProg.get());
 
-    log.info("Game", "Game directory: " + config.gamedataPath());
-    if (!data.load()) {
-        throw std::runtime_error("Invalid game directory path: " +
-                                 config.gamedataPath());
-    }
+    loadGameData();
+    // data.processTextureLoadQueue();
+    finishLoadingGameData();
+    // data.processTextureLoadQueue();
 
-    for (const auto& [specialModel, fileName, name] : kSpecialModels) {
-        auto model = data.loadClump(fileName, name);
-        renderer.setSpecialModel(specialModel, model);
-    }
-
-    // Set up text renderer
-    renderer.text.setFontTexture(FONT_PAGER, "pager");
-    renderer.text.setFontTexture(FONT_PRICEDOWN, "font1");
-    renderer.text.setFontTexture(FONT_ARIAL, "font2");
-
-    hudDrawer.applyHUDScale(config.hudScale());
-    renderer.map.scaleHUD(config.hudScale());
-
-    data.loadDynamicObjects((std::filesystem::path{config.gamedataPath()} / "data/object.dat")
-                                .string());  // FIXME: use path
-
-    data.loadGXT("text/" + config.gameLanguage() + ".gxt");
-
-    getRenderer().water.setWaterTable(data.waterHeights, 48, data.realWater,
-                                      128 * 128);
-
-    for (int m = 0; m < MAP_BLOCK_SIZE; ++m) {
-        std::ostringstream oss;
-        oss << "radar" << std::setw(2) << std::setfill('0') << m << ".txd";
-        data.loadTXD(oss.str());
-    }
-
-    stateManager.enter<LoadingState>(this, [=]() {
+    stateManager.enter<LoadingState>(this, [benchFile, test, newgame, startSave, this]() {
         if (benchFile.has_value()) {
             stateManager.enter<BenchmarkState>(this, *benchFile);
         } else if (test) {
@@ -125,11 +158,6 @@ RWGame::RWGame(Logger& log, const std::optional<RWArgConfigLayer> &args)
             stateManager.enter<MenuState>(this);
         }
     });
-
-    auto loadTimeEnd = std::chrono::steady_clock::now();
-    auto loadTime =
-        std::chrono::duration_cast<std::chrono::milliseconds>(loadTimeEnd - loadTimeStart);
-    log.info("Game", "Loading took " + std::to_string(loadTime.count()) + " ms");
 
     log.info("Game", "Started");
     RW_TIMELINE_LEAVE("Startup");
@@ -432,7 +460,7 @@ int RWGame::run() {
             chrono::duration<float>(currentFrame - lastFrame).count();
         lastFrame = currentFrame;
 
-        if (!world->isPaused()) {
+        if (world && !world->isPaused()) {
             accumulatedTime += frameTime;
 
             // Clamp frameTime, so we won't freeze completely
@@ -669,15 +697,17 @@ void RWGame::render(float alpha, float time) {
 
     renderer.getRenderer().pushDebugGroup("World");
 
-    renderer.renderWorld(world.get(), viewCam, alpha);
+    if (world) {
+        renderer.renderWorld(world.get(), viewCam, alpha);
+    }
 
     renderer.getRenderer().popDebugGroup();
 
     renderDebugView();
 
-    if (!world->isPaused()) hudDrawer.drawOnScreenText(world.get(), renderer);
+    if (world && !world->isPaused()) hudDrawer.drawOnScreenText(world.get(), renderer);
 
-    if (stateManager.currentState()) {
+    if (stateManager.currentState() && isGameDataLoaded()) {
         RW_PROFILE_SCOPE("state");
         stateManager.draw(renderer);
     }

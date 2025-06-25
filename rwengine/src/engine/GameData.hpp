@@ -1,19 +1,10 @@
 #ifndef _RWENGINE_GAMEDATA_HPP_
 #define _RWENGINE_GAMEDATA_HPP_
 
-#include <array>
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <cstddef>
-#include <map>
-#include <memory>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
-#include <platform/FileIndex.hpp>
-#include <rw/debug.hpp>
-#include <rw/forward.hpp>
-
 #include <data/AnimGroup.hpp>
 #include <data/ModelData.hpp>
 #include <data/PedData.hpp>
@@ -24,7 +15,17 @@
 #include <loaders/LoaderDFF.hpp>
 #include <loaders/LoaderIMG.hpp>
 #include <loaders/LoaderTXD.hpp>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <objects/VehicleInfo.hpp>
+#include <platform/FileIndex.hpp>
+#include <rw/forward.hpp>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "platform/FileHandle.hpp"
 
 class Logger;
 struct WeaponData;
@@ -118,6 +119,7 @@ public:
     void loadWater(const std::string& path);
 
     bool load();
+    void load2();
 
     /**
      * Loads model, placement, models and textures from a level file
@@ -359,11 +361,37 @@ public:
 
     GameTexts texts;
 
+    /**
+     * @brief Queue for deferred texture loading
+     */
+    struct PendingTextureLoad {
+        std::string name;
+        FileContentsInfo file;
+        std::string archiveName;
+    };
+
+    std::mutex m_textureQueueMutex;
+    std::vector<PendingTextureLoad> m_pendingTextureLoads;
+    std::atomic<bool> m_processingTextures{false};
+
+    /**
+     * @brief Process all queued texture loads (must be called from main thread)
+     * @return Number of textures processed
+     */
+    size_t processTextureLoadQueue();
+
+    /**
+     * @brief Queue a texture load (thread-safe)
+     */
+    void queueTextureLoad(const std::string& name, const std::string& archiveName);
+
 private:
     /**
      * Determines whether the given path is a valid game directory.
      */
     bool isValidGameDirectory() const;
+
+    FileContentsInfo loadTextureFile(const std::string& name);
 };
 
 #endif

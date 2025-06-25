@@ -15,8 +15,11 @@ void LoadingState::exit() {
 void LoadingState::tick(float dt) {
     RW_UNUSED(dt);
 
-    done();
-    complete();
+    if (game->isGameDataLoaded()) {
+        game->getWorld()->sound.initialize();
+        done();
+        complete();
+    }
 }
 
 bool LoadingState::shouldWorldUpdate() {
@@ -28,6 +31,9 @@ void LoadingState::handleEvent(const SDL_Event& e) {
 }
 
 void LoadingState::draw(GameRenderer& r) {
+    if (!game->isGameDataLoaded()) {
+        return;
+    }
     // Display some manner of loading screen.
     TextRenderer::TextInfo ti;
     ti.text = GameStringUtil::fromString("Loading...", FONT_ARIAL);

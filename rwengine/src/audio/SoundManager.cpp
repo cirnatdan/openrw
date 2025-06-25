@@ -42,6 +42,10 @@ SoundManager::SoundManager() {
 }
 
 SoundManager::SoundManager(GameWorld* engine) : _engine(engine) {
+
+}
+
+void SoundManager::initialize() {
     auto sdtPath = _engine->data->index.findFilePath("audio/sfx.SDT");
     auto rawPath = _engine->data->index.findFilePath("audio/sfx.RAW");
     sdt.load(sdtPath, rawPath);

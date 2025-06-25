@@ -27,6 +27,8 @@ public:
     SoundManager(GameWorld* engine);
     ~SoundManager();
 
+    void initialize();
+
     /// Load sound from file and store it with selected name
     bool loadSound(const std::string& name, const std::string& fileName, bool streamed = true);
 

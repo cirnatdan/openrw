@@ -48,9 +48,11 @@ LoaderDFF& GameData::getDFFLoader(const std::string& textureSlot) {
         if (slotIt != textureSlots.end()) {
             // Set up the texture lookup callback for this loader
             loader->setTextureLookupCallback(
-                [slotIt](const std::string& texture, const std::string&) -> TextureData* {
+                [slotIt, this, textureSlot](const std::string& texture, const std::string&) -> TextureData* {
+                    logger->verbose("Data", "Performing texture lookup in slot: " + textureSlot);
                     auto textureIt = slotIt->second.find(texture);
                     if (textureIt == slotIt->second.end()) {
+                        logger->warning("Data", "Texture not found: " + texture);
                         return nullptr;
                     }
                     return textureIt->second.get();
@@ -77,12 +79,19 @@ bool GameData::load() {
     /// @todo cuts.img files should be loaded differently to gta3.img
     loadIMG("anim/cuts.img");
 
-    textureSlots["particle"] = loadTextureArchive("particle.txd");
-    textureSlots["icons"] = loadTextureArchive("icons.txd");
-    textureSlots["hud"] = loadTextureArchive("hud.txd");
-    textureSlots["fonts"] = loadTextureArchive("fonts.txd");
-    textureSlots["generic"] = loadTextureArchive("generic.txd");
-    loadToTextureArchive("misc.txd", textureSlots["generic"]);
+    queueTextureLoad("particle.txd", "particle");
+    queueTextureLoad("icons.txd", "icons");
+    queueTextureLoad("hud.txd", "hud");
+    queueTextureLoad("fonts.txd", "fonts");
+    queueTextureLoad("generic.txd", "generic");
+    queueTextureLoad("misc.txd", "generic");
+
+    // textureSlots["particle"] = loadTextureArchive("particle.txd");
+    // textureSlots["icons"] = loadTextureArchive("icons.txd");
+    // textureSlots["hud"] = loadTextureArchive("hud.txd");
+    // textureSlots["fonts"] = loadTextureArchive("fonts.txd");
+    // textureSlots["generic"] = loadTextureArchive("generic.txd");
+    // loadToTextureArchive("misc.txd", textureSlots["generic"]);
 
     loadCarcols("data/carcols.dat");
     loadWeather("data/timecyc.dat");
@@ -102,13 +111,18 @@ bool GameData::load() {
     gamezones = ZoneDataList{
         {"CITYZON", 0, {-4000.f, -4000.f, -500.f}, {4000.f, 4000.f, 500.f}, 0, 0, 0}};
 
+    return true;
+}
+
+/**
+ * Load levels and other stuff
+ */
+void GameData::load2() {
     loadLevelFile("data/default.dat");
     loadLevelFile("data/gta3.dat");
 
     // Load ped groups after IDEs so they can resolve
     loadPedGroups("data/pedgrp.dat");
-
-    return true;
 }
 
 void GameData::loadLevelFile(const std::string& path) {
@@ -786,3 +800,54 @@ bool GameData::isValidGameDirectory() const {
 
     return !ec;
 }
+
+void GameData::queueTextureLoad(const std::string& name, const std::string& archiveName) {
+    auto file = loadTextureFile(name);
+    if (!file.data) {
+        logger->error("Data", "Failed to open txd: " + name);
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_textureQueueMutex);
+    m_pendingTextureLoads.push_back({name, std::move(file), archiveName});
+}
+
+FileContentsInfo GameData::loadTextureFile(const std::string& name) {
+    // This can be called from any thread
+    return index.openFile(name);
+}
+
+size_t GameData::processTextureLoadQueue() {
+    // This must be called from the main thread
+    if (m_processingTextures.exchange(true)) {
+        return 0; // Already processing
+    }
+
+    std::vector<PendingTextureLoad> localQueue;
+    {
+        std::lock_guard<std::mutex> lock(m_textureQueueMutex);
+        localQueue = std::move(m_pendingTextureLoads);
+        m_pendingTextureLoads.clear();
+    }
+
+    if (localQueue.empty()) {
+        m_processingTextures = false;
+        return 0;
+    }
+
+    logger->info("Data", "Processing " + std::to_string(localQueue.size()) + " queued texture loads");
+
+    size_t processed = 0;
+    for (const auto& load : localQueue) {
+        if (textureSlots.find(load.archiveName) == textureSlots.end()) {
+            textureSlots[load.archiveName] = loadTextureArchive(load.name);
+        } else {
+            loadToTextureArchive(load.name, textureSlots[load.archiveName]);
+        }
+        processed++;
+    }
+
+    m_processingTextures = false;
+    return processed;
+}
+
